@@ -9,5 +9,8 @@ pymongo
 Certifi
 pymongo[srv]==3.11
 pymongo
+dill
+pyaml
+mlflow
 
 # -e .
