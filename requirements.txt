@@ -12,5 +12,9 @@ pymongo
 dill
 pyaml
 mlflow
+dagshub
+fastapi
+uvicorn
+dotenv
 
 # -e .
