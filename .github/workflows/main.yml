@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'README.md'
+      - "README.md"
 
 permissions:
   contents: read
@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Lint code
         run: echo "Linting repository"
