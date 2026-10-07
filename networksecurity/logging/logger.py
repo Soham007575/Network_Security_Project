@@ -4,7 +4,7 @@ from datetime import datetime
 
 LOG_FILE = f"{datetime.now().strftime('%m_%d_%Y_%H_%M_%S')}.log"
 
-# Vercel allows writing only to /tmp
+# Vercel writable directory
 logs_path = os.path.join("/tmp", "logs")
 os.makedirs(logs_path, exist_ok=True)
 
