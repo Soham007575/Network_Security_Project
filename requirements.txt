@@ -2,19 +2,7 @@ python-dotenv
 pandas
 numpy
 scikit-learn
-matplotlib
-seaborn
-
-pymongo
-Certifi
 pymongo[srv]==3.11
-pymongo
-dill
-pyaml
-mlflow
-dagshub
 fastapi
 uvicorn
-dotenv
-
-# -e .
+certifi
