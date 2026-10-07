@@ -3,6 +3,10 @@ pandas
 numpy
 scikit-learn
 pymongo[srv]==3.11
+dill
+pyaml
 fastapi
 uvicorn
 certifi
+
+# -e .
