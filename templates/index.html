@@ -1,0 +1,367 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing Website Detector</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 30px;
+            color: #1e293b;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 14px;
+            box-shadow: 0 4px 15px #0001;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1e293b;
+        }
+
+        .subtitle {
+            color: #64748b;
+            text-align: center;
+        }
+
+        .upload {
+            border: 2px dashed #94a3b8;
+            padding: 30px;
+            text-align: center;
+            border-radius: 10px;
+            margin: 25px 0;
+            background: #f8fafc;
+        }
+
+        input {
+            margin: 15px;
+            max-width: 100%;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin: 25px 0;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            flex: 1;
+            min-width: 180px;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .stat h2 {
+            font-size: 30px;
+            margin-bottom: 0;
+        }
+
+        .phishing {
+            color: #dc2626;
+        }
+
+        .legitimate {
+            color: #16a34a;
+        }
+
+        .results-heading {
+            margin-top: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 13px;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        th {
+            background: #f1f5f9;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .status-phishing {
+            color: #b91c1c;
+            background: #fee2e2;
+        }
+
+        .status-legitimate {
+            color: #15803d;
+            background: #dcfce7;
+        }
+
+        .error {
+            color: #dc2626;
+            margin-top: 15px;
+        }
+
+        .success {
+            color: #15803d;
+            margin-top: 15px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media(max-width: 600px) {
+            body {
+                padding: 12px;
+            }
+
+            .container {
+                padding: 18px;
+            }
+
+            .stats {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🛡️ Phishing Website Detector</h1>
+
+    <p class="subtitle">
+        Machine Learning Based Network Security System
+    </p>
+
+    <div class="upload">
+
+        <h3>Upload Website Dataset</h3>
+
+        <p>Select a CSV file containing the required website features.</p>
+
+        <input type="file" id="file" accept=".csv">
+
+        <br>
+
+        <button id="scanButton" onclick="scanFile()">
+            Scan Websites
+        </button>
+
+        <div id="message"></div>
+
+    </div>
+
+    <div id="dashboard" class="hidden">
+
+        <div class="stats">
+
+            <div class="stat">
+                <h3>Total Websites Scanned</h3>
+                <h2 id="total">0</h2>
+            </div>
+
+            <div class="stat">
+                <h3>Phishing Detected</h3>
+                <h2 class="phishing" id="phishing">0</h2>
+            </div>
+
+            <div class="stat">
+                <h3>Legitimate Websites</h3>
+                <h2 class="legitimate" id="legitimate">0</h2>
+            </div>
+
+        </div>
+
+        <h3 class="results-heading">Website Detection Results</h3>
+
+        <div style="overflow-x:auto">
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Website</th>
+                        <th>Prediction</th>
+                        <th>Analysis</th>
+                    </tr>
+                </thead>
+
+                <tbody id="tableBody"></tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+async function scanFile() {
+
+    const fileInput = document.getElementById("file");
+    const message = document.getElementById("message");
+    const button = document.getElementById("scanButton");
+
+    if (!fileInput.files.length) {
+        message.innerHTML =
+            "<p class='error'>Please select a CSV file.</p>";
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+
+    button.disabled = true;
+    button.textContent = "Scanning...";
+
+    message.textContent = "Analyzing website features. Please wait...";
+
+    document.getElementById("dashboard").classList.add("hidden");
+
+    try {
+
+        const response = await fetch("/predict_json", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Prediction failed");
+        }
+
+        // Update dashboard statistics
+        document.getElementById("total").textContent =
+            data.total_scanned;
+
+        document.getElementById("phishing").textContent =
+            data.phishing_count;
+
+        document.getElementById("legitimate").textContent =
+            data.legitimate_count;
+
+        const results = data.results;
+
+        if (!results || results.length === 0) {
+            throw new Error("No prediction results found.");
+        }
+
+        // Generate readable results
+        const tableBody = document.getElementById("tableBody");
+
+        tableBody.innerHTML = results.map(row => {
+
+            const isPhishing = row.prediction === "Phishing";
+
+            const statusClass = isPhishing
+                ? "status-phishing"
+                : "status-legitimate";
+
+            const analysis = row.message || (
+                isPhishing
+                    ? "Potentially malicious website detected"
+                    : "Classified as legitimate"
+            );
+
+            return `
+                <tr>
+                    <td>${escapeHTML(row.website)}</td>
+
+                    <td>
+                        <span class="status ${statusClass}">
+                            ${escapeHTML(row.prediction)}
+                        </span>
+                    </td>
+
+                    <td>${escapeHTML(analysis)}</td>
+                </tr>
+            `;
+
+        }).join("");
+
+        document.getElementById("dashboard")
+            .classList.remove("hidden");
+
+        message.innerHTML =
+            "<p class='success'>✓ Scan completed successfully!</p>";
+
+    } catch (error) {
+
+        message.innerHTML =
+            `<p class="error">${escapeHTML(error.message)}</p>`;
+
+    } finally {
+
+        button.disabled = false;
+        button.textContent = "Scan Websites";
+
+    }
+
+}
+
+// Safely display values from the uploaded CSV/API
+function escapeHTML(value) {
+
+    return String(value ?? "").replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+    })[character]);
+
+}
+
+</script>
+
+</body>
+</html>

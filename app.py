@@ -1,13 +1,11 @@
+import os
 import sys
+
 import pandas as pd
-
 from dotenv import load_dotenv
-
-from fastapi import FastAPI, File, UploadFile, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-
 from uvicorn import run as app_run
 
 from networksecurity.exception.exception import NetworkSecurityException
@@ -15,96 +13,120 @@ from networksecurity.utils.main_utils.utils import load_object
 from networksecurity.utils.ml_utils.model.estimator import NetworkModel
 
 
-# --------------------------------------------------
-# Load Environment Variables
-# --------------------------------------------------
-
+# Load environment variables
 load_dotenv()
 
+# Project paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# --------------------------------------------------
-# FastAPI Application
-# --------------------------------------------------
+PREPROCESSOR_PATH = os.path.join(
+    BASE_DIR, "final_model", "preprocessor.pkl"
+)
 
-app = FastAPI()
+MODEL_PATH = os.path.join(
+    BASE_DIR, "final_model", "model.pkl"
+)
 
+# Initialize FastAPI
+app = FastAPI(
+    title="Phishing Website Detection System",
+    description="Machine Learning Based Network Security System",
+    version="1.0.0"
+)
 
-# --------------------------------------------------
-# CORS
-# --------------------------------------------------
-
-origins = ["*"]
-
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# --------------------------------------------------
-# Templates
-# --------------------------------------------------
-
+# HTML templates
 templates = Jinja2Templates(
-    directory="./templates"
+    directory=os.path.join(BASE_DIR, "templates")
 )
 
 
-# --------------------------------------------------
-# Home Route
-# --------------------------------------------------
+# Home page
+@app.get("/")
+async def index(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={}
+    )
 
-@app.get("/", tags=["authentication"])
-async def index():
-    return RedirectResponse(url="/docs")
+
+# Optional UI route
+@app.get("/ui")
+async def home(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={}
+    )
 
 
-# --------------------------------------------------
-# Prediction Route
-# --------------------------------------------------
+# Load model and make predictions
+def run_model(df: pd.DataFrame):
 
+    # Remove target column if present
+    if "Result" in df.columns:
+        df = df.drop(columns=["Result"])
+
+    # Load saved preprocessing and model objects
+    preprocessor = load_object(PREPROCESSOR_PATH)
+    final_model = load_object(MODEL_PATH)
+
+    # Initialize network model
+    network_model = NetworkModel(
+        preprocessor=preprocessor,
+        model=final_model
+    )
+
+    # Return cleaned data and predictions
+    predictions = network_model.predict(df)
+
+    return df, predictions
+
+
+# Convert numeric prediction to readable label
+def get_prediction_label(prediction):
+    prediction = int(prediction)
+
+    if prediction == 1:
+        return "Legitimate"
+    elif prediction == -1:
+        return "Phishing"
+    else:
+        return "Unknown"
+
+
+# CSV prediction route: Returns HTML table
 @app.post("/predict")
 async def predict_route(
     request: Request,
     file: UploadFile = File(...)
 ):
     try:
-
-        # Read uploaded CSV
         df = pd.read_csv(file.file)
 
-        # Load preprocessor
-        preprocessor = load_object(
-            "final_model/preprocessor.pkl"
-        )
+        df, y_pred = run_model(df)
 
-        # Load trained model
-        final_model = load_object(
-            "final_model/model.pkl"
-        )
+        labels = [
+            get_prediction_label(prediction)
+            for prediction in y_pred
+        ]
 
-        # Create network model
-        network_model = NetworkModel(
-            preprocessor=preprocessor,
-            model=final_model
-        )
+        df["Prediction"] = labels
 
-        # Make prediction
-        y_pred = network_model.predict(df)
-
-        # Add prediction column
-        df["predicted_column"] = y_pred
-
-        # Convert result to HTML
         table_html = df.to_html(
             classes="table table-striped",
             index=False
         )
 
-        # Return HTML result
         return templates.TemplateResponse(
             request=request,
             name="table.html",
@@ -114,19 +136,73 @@ async def predict_route(
         )
 
     except Exception as e:
+        raise NetworkSecurityException(e, sys)
 
-        raise NetworkSecurityException(
-            e,
-            sys
+
+# CSV prediction route: Returns readable JSON
+@app.post("/predict_json")
+async def predict_json(
+    file: UploadFile = File(...)
+):
+    try:
+        df = pd.read_csv(file.file)
+
+        # Preserve website information if available
+        website_column = next(
+            (
+                column for column in df.columns
+                if column.lower() in ["url", "website", "domain"]
+            ),
+            None
+        )
+
+        df, y_pred = run_model(df)
+
+        # Convert numeric predictions to readable labels
+        labels = [
+            get_prediction_label(prediction)
+            for prediction in y_pred
+        ]
+
+        results = []
+
+        for index, prediction in enumerate(labels):
+
+            # Display URL/domain when available
+            if website_column and website_column in df.columns:
+                website = str(df.iloc[index][website_column])
+            else:
+                website = f"Website #{index + 1}"
+
+            if prediction == "Phishing":
+                message = "Potentially malicious website detected"
+            elif prediction == "Legitimate":
+                message = "Classified as legitimate"
+            else:
+                message = "Prediction could not be identified"
+
+            results.append({
+                "website": website,
+                "prediction": prediction,
+                "message": message
+            })
+
+        return {
+            "total_scanned": len(results),
+            "phishing_count": labels.count("Phishing"),
+            "legitimate_count": labels.count("Legitimate"),
+            "results": results
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not process this file: {e}"
         )
 
 
-# --------------------------------------------------
-# Local Development
-# --------------------------------------------------
-
+# Run application
 if __name__ == "__main__":
-
     app_run(
         app,
         host="0.0.0.0",
