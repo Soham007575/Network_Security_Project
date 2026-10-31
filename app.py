@@ -1,6 +1,8 @@
+
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -27,6 +29,9 @@ MODEL_PATH = os.path.join(
     BASE_DIR, "final_model", "model.pkl"
 )
 
+TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+
+
 # Initialize FastAPI
 app = FastAPI(
     title="Phishing Website Detection System",
@@ -41,12 +46,68 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
+    )
+
 
 # HTML templates
-templates = Jinja2Templates(
-    directory=os.path.join(BASE_DIR, "templates")
-)
+templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+
+# Load model and make predictions
+def run_model(df: pd.DataFrame):
+
+    # Remove target column if present
+    if "Result" in df.columns:
+        df = df.drop(columns=["Result"])
+
+    # Load saved preprocessing and model objects
+    preprocessor = load_object(PREPROCESSOR_PATH)
+    final_model = load_object(MODEL_PATH)
+
+    # Initialize network model
+    network_model = NetworkModel(
+        preprocessor=preprocessor,
+        model=final_model
+    )
+
+    # Generate predictions
+    predictions = network_model.predict(df)
+
+    # Convert predictions to a flat NumPy array
+    predictions = np.asarray(predictions).reshape(-1)
+
+    # Debug information in Vercel Runtime Logs
+    print("Raw predictions:", repr(predictions))
+    print("Prediction shape:", predictions.shape)
+    print("Prediction dtype:", predictions.dtype)
+
+    return df, predictions
+
+
+# Convert model prediction to readable label
+def get_prediction_label(prediction):
+
+    # Convert NumPy scalar to regular Python scalar
+    if isinstance(prediction, np.generic):
+        prediction = prediction.item()
+
+    # Handle numeric labels
+    try:
+        prediction = int(prediction)
+    except (TypeError, ValueError, OverflowError):
+        return "Unknown"
+
+    # Expected model encoding:
+    #  1  = Legitimate
+    # -1  = Phishing
+    if prediction == 1:
+        return "Legitimate"
+
+    elif prediction == -1:
+        return "Phishing"
+
+    else:
+        return "Unknown"
 
 
 # Home page
@@ -67,41 +128,6 @@ async def home(request: Request):
         name="index.html",
         context={}
     )
-
-
-# Load model and make predictions
-def run_model(df: pd.DataFrame):
-
-    # Remove target column if present
-    if "Result" in df.columns:
-        df = df.drop(columns=["Result"])
-
-    # Load saved preprocessing and model objects
-    preprocessor = load_object(PREPROCESSOR_PATH)
-    final_model = load_object(MODEL_PATH)
-
-    # Initialize network model
-    network_model = NetworkModel(
-        preprocessor=preprocessor,
-        model=final_model
-    )
-
-    # Return cleaned data and predictions
-    predictions = network_model.predict(df)
-
-    return df, predictions
-
-
-# Convert numeric prediction to readable label
-def get_prediction_label(prediction):
-    prediction = int(prediction)
-
-    if prediction == 1:
-        return "Legitimate"
-    elif prediction == -1:
-        return "Phishing"
-    else:
-        return "Unknown"
 
 
 # CSV prediction route: Returns HTML table
@@ -158,7 +184,6 @@ async def predict_json(
 
         df, y_pred = run_model(df)
 
-        # Convert numeric predictions to readable labels
         labels = [
             get_prediction_label(prediction)
             for prediction in y_pred
@@ -176,8 +201,10 @@ async def predict_json(
 
             if prediction == "Phishing":
                 message = "Potentially malicious website detected"
+
             elif prediction == "Legitimate":
                 message = "Classified as legitimate"
+
             else:
                 message = "Prediction could not be identified"
 
@@ -201,7 +228,7 @@ async def predict_json(
         )
 
 
-# Run application
+# Run application locally
 if __name__ == "__main__":
     app_run(
         app,
