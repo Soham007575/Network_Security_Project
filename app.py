@@ -86,26 +86,12 @@ def run_model(df: pd.DataFrame):
 
 # Convert model prediction to readable label
 def get_prediction_label(prediction):
+    prediction = int(prediction)
 
-    # Convert NumPy scalar to regular Python scalar
-    if isinstance(prediction, np.generic):
-        prediction = prediction.item()
-
-    # Handle numeric labels
-    try:
-        prediction = int(prediction)
-    except (TypeError, ValueError, OverflowError):
-        return "Unknown"
-
-    # Expected model encoding:
-    #  1  = Legitimate
-    # -1  = Phishing
     if prediction == 1:
         return "Legitimate"
-
-    elif prediction == -1:
+    elif prediction == 0:
         return "Phishing"
-
     else:
         return "Unknown"
 
